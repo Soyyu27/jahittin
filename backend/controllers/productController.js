@@ -1,4 +1,6 @@
 const db = require('../config/database');
+const fs = require('fs');
+const path = require('path');
 
 // Get All Products dengan Filter
 exports.getAllProducts = async (req, res) => {
@@ -9,7 +11,7 @@ exports.getAllProducts = async (req, res) => {
     const offset = (safePage - 1) * safeLimit;
 
     let query = `
-      SELECT p.*, c.name as category_name, c.slug as category_slug 
+      SELECT p.*, c.name as category_name, c.slug as category_slug, c.model_3d_url 
       FROM products p 
       LEFT JOIN categories c ON p.category_id = c.id 
       WHERE 1=1
@@ -17,24 +19,20 @@ exports.getAllProducts = async (req, res) => {
 
     const params = [];
 
-    // Filter kategori
     if (category) {
       query += ' AND c.slug = ?';
       params.push(category);
     }
 
-    // Pencarian
     if (search) {
       query += ' AND (p.name LIKE ? OR p.description LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    // Tambahkan limit + offset langsung dalam string (tidak pakai ?)
     query += ` ORDER BY p.created_at DESC LIMIT ${safeLimit} OFFSET ${offset}`;
 
     const [products] = await db.query(query, params);
 
-    // Ambil total count
     let countQuery = `
       SELECT COUNT(*) as total 
       FROM products p 
@@ -65,16 +63,11 @@ exports.getAllProducts = async (req, res) => {
         totalPages: Math.ceil(countResult[0].total / safeLimit)
       }
     });
-
   } catch (error) {
     console.error('Get products error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Terjadi kesalahan saat mengambil produk.' 
-    });
+    res.status(500).json({ success: false, message: 'Terjadi kesalahan saat mengambil produk.' });
   }
 };
-
 
 // Get Product by ID atau Slug
 exports.getProductById = async (req, res) => {
@@ -82,7 +75,7 @@ exports.getProductById = async (req, res) => {
     const { id } = req.params;
     
     const [products] = await db.execute(
-      `SELECT p.*, c.name as category_name, c.slug as category_slug 
+      `SELECT p.*, c.name as category_name, c.slug as category_slug, c.model_3d_url 
        FROM products p 
        LEFT JOIN categories c ON p.category_id = c.id 
        WHERE p.id = ? OR p.slug = ?`,
@@ -90,23 +83,16 @@ exports.getProductById = async (req, res) => {
     );
 
     if (products.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Produk tidak ditemukan.' 
-      });
+      return res.status(404).json({ success: false, message: 'Produk tidak ditemukan.' });
     }
 
     res.json({
       success: true,
       product: products[0]
     });
-
   } catch (error) {
     console.error('Get product error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Terjadi kesalahan saat mengambil produk.' 
-    });
+    res.status(500).json({ success: false, message: 'Terjadi kesalahan saat mengambil produk.' });
   }
 };
 
@@ -115,27 +101,27 @@ exports.createProduct = async (req, res) => {
   try {
     const { name, slug, description, price, stock, category_id, is_customizable } = req.body;
 
-    if (!name || !slug || !price || !category_id) {
+    if (!name || !slug || !price || !category_id || !req.file) {
       return res.status(400).json({
         success: false,
-        message: 'Data produk tidak lengkap.'
+        message: 'Data produk tidak lengkap (nama, slug, harga, kategori, dan gambar wajib diisi).'
       });
     }
 
-    // Tangani file upload
-    let image_url = null;
-    let model_3d_url = null;
+    // Validasi kategori memiliki model_3d_url
+    const [category] = await db.query('SELECT model_3d_url FROM categories WHERE id = ?', [category_id]);
+    if (category.length === 0 || !category[0].model_3d_url) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kategori tidak valid atau belum memiliki file GLB/GLTF.'
+      });
+    }
 
-    if (req.files?.image) {
-      image_url = '/uploads/images/' + req.files.image[0].filename;
-    }
-    if (req.files?.model_3d) {
-      model_3d_url = '/uploads/models/' + req.files.model_3d[0].filename;
-    }
+    const image_url = '/uploads/images/' + req.file.filename;
 
     const [result] = await db.execute(
-      `INSERT INTO products (name, slug, description, price, stock, category_id, image_url, model_3d_url, is_customizable)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO products (name, slug, description, price, stock, category_id, image_url, is_customizable)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
         slug,
@@ -144,7 +130,6 @@ exports.createProduct = async (req, res) => {
         Number(stock) || 0,
         category_id,
         image_url,
-        model_3d_url,
         is_customizable === 'true' || is_customizable === true ? 1 : 0
       ]
     );
@@ -154,7 +139,6 @@ exports.createProduct = async (req, res) => {
       message: 'Produk berhasil ditambahkan.',
       productId: result.insertId
     });
-
   } catch (error) {
     console.error('Create product error:', error);
     res.status(500).json({
@@ -163,7 +147,6 @@ exports.createProduct = async (req, res) => {
     });
   }
 };
-
 
 // Update Product (Admin Only)
 exports.updateProduct = async (req, res) => {
@@ -176,20 +159,30 @@ exports.updateProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Produk tidak ditemukan.' });
     }
 
-    let image_url = existing[0].image_url;
-    let model_3d_url = existing[0].model_3d_url;
-
-    if (req.files?.image) {
-      image_url = '/uploads/images/' + req.files.image[0].filename;
+    // Validasi kategori memiliki model_3d_url
+    const [category] = await db.query('SELECT model_3d_url FROM categories WHERE id = ?', [category_id || existing[0].category_id]);
+    if (category.length === 0 || !category[0].model_3d_url) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kategori tidak valid atau belum memiliki file GLB/GLTF.'
+      });
     }
-    if (req.files?.model_3d) {
-      model_3d_url = '/uploads/models/' + req.files.model_3d[0].filename;
+
+    let image_url = existing[0].image_url;
+    if (req.file) {
+      if (existing[0].image_url) {
+        const oldFilePath = path.join(__dirname, '../public', existing[0].image_url);
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      }
+      image_url = '/uploads/images/' + req.file.filename;
     }
 
     await db.execute(
       `UPDATE products 
        SET name = ?, slug = ?, description = ?, price = ?, stock = ?, 
-           category_id = ?, image_url = ?, model_3d_url = ?, is_customizable = ?
+           category_id = ?, image_url = ?, is_customizable = ?
        WHERE id = ?`,
       [
         name || existing[0].name,
@@ -199,7 +192,6 @@ exports.updateProduct = async (req, res) => {
         Number(stock) || existing[0].stock,
         category_id || existing[0].category_id,
         image_url,
-        model_3d_url,
         is_customizable === 'true' || is_customizable === true ? 1 : 0,
         id
       ]
@@ -209,7 +201,6 @@ exports.updateProduct = async (req, res) => {
       success: true,
       message: 'Produk berhasil diperbarui.'
     });
-
   } catch (error) {
     console.error('Update product error:', error);
     res.status(500).json({
@@ -219,32 +210,36 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-
 // Delete Product (Admin Only)
 exports.deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
+    const [existing] = await db.execute('SELECT * FROM products WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, message: 'Produk tidak ditemukan.' });
+    }
+
+    if (existing[0].image_url) {
+      const filePath = path.join(__dirname, '../public', existing[0].image_url);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
     const [result] = await db.execute('DELETE FROM products WHERE id = ?', [id]);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Produk tidak ditemukan.' 
-      });
+      return res.status(404).json({ success: false, message: 'Produk tidak ditemukan.' });
     }
 
     res.json({
       success: true,
       message: 'Produk berhasil dihapus.'
     });
-
   } catch (error) {
     console.error('Delete product error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Terjadi kesalahan saat menghapus produk.' 
-    });
+    res.status(500).json({ success: false, message: 'Terjadi kesalahan saat menghapus produk.' });
   }
 };
 
@@ -257,12 +252,8 @@ exports.getCategories = async (req, res) => {
       success: true,
       categories
     });
-
   } catch (error) {
     console.error('Get categories error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Terjadi kesalahan saat mengambil kategori.' 
-    });
+    res.status(500).json({ success: false, message: 'Terjadi kesalahan saat mengambil kategori.' });
   }
 };

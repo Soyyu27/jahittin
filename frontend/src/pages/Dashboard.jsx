@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Package, ShoppingBag, Users, TrendingUp, Edit, Trash2, Plus, X, Image, Box } from 'lucide-react';
+import { Package, ShoppingBag, Users, TrendingUp, Edit, Trash2, Plus, X, Image } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -17,12 +17,14 @@ const Dashboard = () => {
     revenue: 0
   });
   const [loading, setLoading] = useState(true);
-  
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showEditProduct, setShowEditProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showEditCategory, setShowEditCategory] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
   
-  const [formData, setFormData] = useState({
+  const [productForm, setProductForm] = useState({
     name: '',
     slug: '',
     description: '',
@@ -32,17 +34,16 @@ const Dashboard = () => {
     is_customizable: true
   });
   
+  const [categoryForm, setCategoryForm] = useState({
+    name: '',
+    slug: '',
+    description: '',
+  });
+  
   const [imageFile, setImageFile] = useState(null);
   const [modelFile, setModelFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [modelFileName, setModelFileName] = useState('');
-
-  const [showAddCategory, setShowAddCategory] = useState(false);
-  const [categoryForm, setCategoryForm] = useState({
-    name: '',
-    slug: '',
-    description: ''
-  });
 
   const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
@@ -54,15 +55,15 @@ const Dashboard = () => {
     }
     loadDashboardData();
     loadCategories();
-  }, [isAdmin]);
+  }, [isAdmin, navigate]);
 
   const loadCategories = async () => {
     try {
-      // FIXED: Gunakan /api/categories
       const response = await axios.get('http://localhost:5000/api/categories');
       setCategories(response.data.categories);
     } catch (error) {
       console.error('Error loading categories:', error);
+      alert('Gagal mengambil kategori');
     }
   };
 
@@ -92,6 +93,7 @@ const Dashboard = () => {
       });
     } catch (error) {
       console.error('Error loading dashboard:', error);
+      alert('Gagal memuat data dashboard');
     } finally {
       setLoading(false);
     }
@@ -135,8 +137,8 @@ const Dashboard = () => {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
+  const resetProductForm = () => {
+    setProductForm({
       name: '',
       slug: '',
       description: '',
@@ -146,12 +148,23 @@ const Dashboard = () => {
       is_customizable: true
     });
     setImageFile(null);
-    setModelFile(null);
     setImagePreview(null);
-    setModelFileName('');
     setShowAddProduct(false);
     setShowEditProduct(false);
     setEditingProduct(null);
+  };
+
+  const resetCategoryForm = () => {
+    setCategoryForm({
+      name: '',
+      slug: '',
+      description: '',
+    });
+    setModelFile(null);
+    setModelFileName('');
+    setShowAddCategory(false);
+    setShowEditCategory(false);
+    setEditingCategory(null);
   };
 
   const generateSlug = (name) => {
@@ -161,15 +174,30 @@ const Dashboard = () => {
       .replace(/^-|-$/g, '');
   };
 
-  const handleFormChange = (e) => {
+  const handleProductFormChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
+    setProductForm(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
 
     if (name === 'name') {
-      setFormData(prev => ({
+      setProductForm(prev => ({
+        ...prev,
+        slug: generateSlug(value)
+      }));
+    }
+  };
+
+  const handleCategoryFormChange = (e) => {
+    const { name, value } = e.target;
+    setCategoryForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+
+    if (name === 'name') {
+      setCategoryForm(prev => ({
         ...prev,
         slug: generateSlug(value)
       }));
@@ -179,18 +207,17 @@ const Dashboard = () => {
   const handleAddProduct = async (e) => {
     e.preventDefault();
     
-    if (!imageFile) {
+    if (!imageFile && showAddProduct) {
       alert('Gambar produk wajib diupload!');
       return;
     }
 
     const form = new FormData();
-    Object.keys(formData).forEach(key => {
-      form.append(key, formData[key]);
+    Object.keys(productForm).forEach(key => {
+      form.append(key, productForm[key]);
     });
     
-    form.append('image', imageFile);
-    if (modelFile) form.append('model_3d', modelFile);
+    if (imageFile) form.append('image', imageFile);
 
     try {
       await axios.post('http://localhost:5000/api/products', form, {
@@ -198,39 +225,22 @@ const Dashboard = () => {
       });
       
       alert('Produk berhasil ditambahkan!');
-      resetForm();
+      resetProductForm();
       loadDashboardData();
     } catch (error) {
       alert('Gagal menambahkan produk: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  const handleEditClick = (product) => {
-    setEditingProduct(product);
-    setFormData({
-      name: product.name,
-      slug: product.slug,
-      description: product.description || '',
-      price: product.price,
-      stock: product.stock,
-      category_id: product.category_id,
-      is_customizable: product.is_customizable
-    });
-    setImagePreview(product.image_url ? `http://localhost:5000${product.image_url}` : null);
-    setModelFileName(product.model_3d_url ? product.model_3d_url.split('/').pop() : '');
-    setShowEditProduct(true);
-  };
-
   const handleUpdateProduct = async (e) => {
     e.preventDefault();
     
     const form = new FormData();
-    Object.keys(formData).forEach(key => {
-      form.append(key, formData[key]);
+    Object.keys(productForm).forEach(key => {
+      form.append(key, productForm[key]);
     });
     
     if (imageFile) form.append('image', imageFile);
-    if (modelFile) form.append('model_3d', modelFile);
 
     try {
       await axios.put(`http://localhost:5000/api/products/${editingProduct.id}`, form, {
@@ -238,41 +248,94 @@ const Dashboard = () => {
       });
       
       alert('Produk berhasil diupdate!');
-      resetForm();
+      resetProductForm();
       loadDashboardData();
     } catch (error) {
-      alert('Gagal mengupdate produk: ' + (error.response?.data?.message || error.message));
+      if (error.response?.status === 401) {
+        alert('Sesi telah berakhir. Silakan login kembali.');
+        logout();
+        navigate('/login');
+      } else {
+        alert('Gagal mengupdate produk: ' + (error.response?.data?.message || error.message));
+      }
     }
   };
 
   const handleDeleteProduct = async (id) => {
-    if (!confirm('Yakin ingin menghapus produk ini? File terkait juga akan dihapus.')) return;
+    if (!window.confirm('Yakin ingin menghapus produk ini? File terkait juga akan dihapus.')) return;
     
     try {
       await axios.delete(`http://localhost:5000/api/products/${id}`);
-      loadDashboardData();
       alert('Produk berhasil dihapus');
+      loadDashboardData();
     } catch (error) {
-      alert('Gagal menghapus produk');
+      alert('Gagal menghapus produk: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  // FIXED: Category CRUD
   const handleAddCategory = async (e) => {
     e.preventDefault();
+    
+    if (!modelFile && showAddCategory) {
+      alert('File GLB/GLTF wajib diupload!');
+      return;
+    }
+
+    const form = new FormData();
+    Object.keys(categoryForm).forEach(key => {
+      form.append(key, categoryForm[key]);
+    });
+    
+    if (modelFile) form.append('model_3d', modelFile);
+
     try {
-      await axios.post('http://localhost:5000/api/categories', categoryForm);
+      await axios.post('http://localhost:5000/api/categories', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       alert('Kategori berhasil ditambahkan!');
-      setCategoryForm({ name: '', slug: '', description: '' });
-      setShowAddCategory(false);
+      resetCategoryForm();
       loadCategories();
     } catch (error) {
       alert('Gagal menambahkan kategori: ' + (error.response?.data?.message || error.message));
     }
   };
 
+  const handleEditCategory = (category) => {
+    setEditingCategory(category);
+    setCategoryForm({
+      name: category.name,
+      slug: category.slug,
+      description: category.description || '',
+    });
+    setModelFileName(category.model_3d_url ? category.model_3d_url.split('/').pop() : '');
+    setShowEditCategory(true);
+  };
+
+  const handleUpdateCategory = async (e) => {
+    e.preventDefault();
+    
+    const form = new FormData();
+    Object.keys(categoryForm).forEach(key => {
+      form.append(key, categoryForm[key]);
+    });
+    
+    if (modelFile) form.append('model_3d', modelFile);
+
+    try {
+      await axios.put(`http://localhost:5000/api/categories/${editingCategory.id}`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      alert('Kategori berhasil diupdate!');
+      resetCategoryForm();
+      loadCategories();
+      loadDashboardData();
+    } catch (error) {
+      alert('Gagal mengupdate kategori: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
   const handleDeleteCategory = async (id) => {
-    if (!confirm('Yakin ingin menghapus kategori ini?')) return;
+    if (!window.confirm('Yakin ingin menghapus kategori ini?')) return;
     
     try {
       await axios.delete(`http://localhost:5000/api/categories/${id}`);
@@ -289,10 +352,10 @@ const Dashboard = () => {
       await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, {
         status: newStatus
       });
-      loadDashboardData();
       alert('Status pesanan berhasil diupdate');
+      loadDashboardData();
     } catch (error) {
-      alert('Gagal mengupdate status pesanan');
+      alert('Gagal mengupdate status pesanan: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -508,7 +571,7 @@ const Dashboard = () => {
                           <h4 className="text-2xl font-bold text-primary-dark">
                             {showAddProduct ? 'Tambah Produk Baru' : 'Edit Produk'}
                           </h4>
-                          <button onClick={resetForm} className="text-gray-500 hover:text-gray-700">
+                          <button onClick={resetProductForm} className="text-gray-500 hover:text-gray-700">
                             <X size={24} />
                           </button>
                         </div>
@@ -521,8 +584,8 @@ const Dashboard = () => {
                             <input
                               type="text"
                               name="name"
-                              value={formData.name}
-                              onChange={handleFormChange}
+                              value={productForm.name}
+                              onChange={handleProductFormChange}
                               placeholder="Contoh: Kaos Polos Premium"
                               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green"
                               required
@@ -536,8 +599,8 @@ const Dashboard = () => {
                             <input
                               type="text"
                               name="slug"
-                              value={formData.slug}
-                              onChange={handleFormChange}
+                              value={productForm.slug}
+                              onChange={handleProductFormChange}
                               placeholder="kaos-polos-premium"
                               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green bg-gray-50"
                               required
@@ -551,8 +614,8 @@ const Dashboard = () => {
                             </label>
                             <textarea
                               name="description"
-                              value={formData.description}
-                              onChange={handleFormChange}
+                              value={productForm.description}
+                              onChange={handleProductFormChange}
                               placeholder="Deskripsi lengkap produk..."
                               rows="3"
                               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green"
@@ -567,8 +630,8 @@ const Dashboard = () => {
                               <input
                                 type="number"
                                 name="price"
-                                value={formData.price}
-                                onChange={handleFormChange}
+                                value={productForm.price}
+                                onChange={handleProductFormChange}
                                 placeholder="45000"
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green"
                                 required
@@ -581,8 +644,8 @@ const Dashboard = () => {
                               <input
                                 type="number"
                                 name="stock"
-                                value={formData.stock}
-                                onChange={handleFormChange}
+                                value={productForm.stock}
+                                onChange={handleProductFormChange}
                                 placeholder="100"
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green"
                                 required
@@ -596,8 +659,8 @@ const Dashboard = () => {
                             </label>
                             <select
                               name="category_id"
-                              value={formData.category_id}
-                              onChange={handleFormChange}
+                              value={productForm.category_id}
+                              onChange={handleProductFormChange}
                               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green"
                               required
                             >
@@ -640,32 +703,13 @@ const Dashboard = () => {
                             </div>
                           </div>
 
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Model 3D (GLB) - Opsional
-                            </label>
-                            <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-accent-green transition block">
-                              <input
-                                type="file"
-                                accept=".glb,.gltf"
-                                onChange={handleModelChange}
-                                className="hidden"
-                              />
-                              <Box size={32} className="mx-auto text-gray-400 mb-2" />
-                              <p className="text-sm text-gray-600">
-                                {modelFileName || 'Klik untuk upload model 3D'}
-                              </p>
-                              <p className="text-xs text-gray-400 mt-1">GLB/GLTF (Max 10MB)</p>
-                            </label>
-                          </div>
-
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
                               name="is_customizable"
                               id="is_customizable"
-                              checked={formData.is_customizable}
-                              onChange={handleFormChange}
+                              checked={productForm.is_customizable}
+                              onChange={handleProductFormChange}
                               className="w-4 h-4 text-accent-green border-gray-300 rounded focus:ring-accent-green"
                             />
                             <label htmlFor="is_customizable" className="text-sm text-gray-700">
@@ -682,7 +726,7 @@ const Dashboard = () => {
                             </button>
                             <button
                               type="button"
-                              onClick={resetForm}
+                              onClick={resetProductForm}
                               className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-400 transition font-semibold"
                             >
                               Batal
@@ -703,7 +747,7 @@ const Dashboard = () => {
                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Kategori</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Harga</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Stok</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">3D</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">3D Model</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Aksi</th>
                       </tr>
                     </thead>
@@ -737,7 +781,7 @@ const Dashboard = () => {
                           </td>
                           <td className="px-4 py-3">
                             {product.model_3d_url ? (
-                              <span className="text-green-600 text-sm">✓ Ada</span>
+                              <span className="text-green-600 text-sm">✓ {product.model_3d_url.split('/').pop()}</span>
                             ) : (
                               <span className="text-gray-400 text-sm">-</span>
                             )}
@@ -745,7 +789,20 @@ const Dashboard = () => {
                           <td className="px-4 py-3">
                             <div className="flex gap-2">
                               <button 
-                                onClick={() => handleEditClick(product)}
+                                onClick={() => {
+                                  setEditingProduct(product);
+                                  setProductForm({
+                                    name: product.name,
+                                    slug: product.slug,
+                                    description: product.description || '',
+                                    price: product.price,
+                                    stock: product.stock,
+                                    category_id: product.category_id,
+                                    is_customizable: product.is_customizable
+                                  });
+                                  setImagePreview(product.image_url ? `http://localhost:5000${product.image_url}` : null);
+                                  setShowEditProduct(true);
+                                }}
                                 className="text-blue-600 hover:text-blue-800"
                                 title="Edit"
                               >
@@ -789,71 +846,132 @@ const Dashboard = () => {
                   </button>
                 </div>
 
-                {showAddCategory && (
-                  <div className="bg-gray-50 p-6 rounded-lg mb-6">
-                    <h4 className="text-lg font-semibold text-primary-dark mb-4">Tambah Kategori Baru</h4>
-                    <form onSubmit={handleAddCategory} className="grid md:grid-cols-3 gap-4">
-                      <input
-                        type="text"
-                        placeholder="Nama Kategori"
-                        value={categoryForm.name}
-                        onChange={(e) => {
-                          setCategoryForm({
-                            ...categoryForm,
-                            name: e.target.value,
-                            slug: generateSlug(e.target.value)
-                          });
-                        }}
-                        className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green"
-                        required
-                      />
-                      <input
-                        type="text"
-                        placeholder="Slug (otomatis)"
-                        value={categoryForm.slug}
-                        readOnly
-                        className="px-4 py-2 border rounded-lg bg-gray-100"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Deskripsi (opsional)"
-                        value={categoryForm.description}
-                        onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
-                        className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green"
-                      />
-                      <div className="md:col-span-3 flex gap-2">
-                        <button type="submit" className="bg-accent-green text-white px-6 py-2 rounded-lg hover:bg-green-600 transition">
-                          Simpan
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            setShowAddCategory(false);
-                            setCategoryForm({ name: '', slug: '', description: '' });
-                          }}
-                          className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition"
-                        >
-                          Batal
-                        </button>
+                {/* Add/Edit Category Modal */}
+                {(showAddCategory || showEditCategory) && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+                      <div className="p-6">
+                        <div className="flex justify-between items-center mb-6">
+                          <h4 className="text-2xl font-bold text-primary-dark">
+                            {showAddCategory ? 'Tambah Kategori Baru' : 'Edit Kategori'}
+                          </h4>
+                          <button onClick={resetCategoryForm} className="text-gray-500 hover:text-gray-700">
+                            <X size={24} />
+                          </button>
+                        </div>
+
+                        <form onSubmit={showAddCategory ? handleAddCategory : handleUpdateCategory} className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Nama Kategori *
+                            </label>
+                            <input
+                              type="text"
+                              name="name"
+                              value={categoryForm.name}
+                              onChange={handleCategoryFormChange}
+                              placeholder="Contoh: Kaos"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Slug (URL) *
+                            </label>
+                            <input
+                              type="text"
+                              name="slug"
+                              value={categoryForm.slug}
+                              onChange={handleCategoryFormChange}
+                              placeholder="kaos"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green bg-gray-50"
+                              required
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Otomatis dibuat dari nama kategori</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Deskripsi
+                            </label>
+                            <textarea
+                              name="description"
+                              value={categoryForm.description}
+                              onChange={handleCategoryFormChange}
+                              placeholder="Deskripsi kategori..."
+                              rows="3"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-green"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Model 3D (GLB/GLTF) * {showEditCategory && '(Upload baru untuk mengganti)'}
+                            </label>
+                            <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-accent-green transition block">
+                              <input
+                                type="file"
+                                accept=".glb,.gltf"
+                                onChange={handleModelChange}
+                                className="hidden"
+                                required={showAddCategory}
+                              />
+                              <Image size={32} className="mx-auto text-gray-400 mb-2" />
+                              <p className="text-sm text-gray-600">
+                                {modelFileName || 'Klik untuk upload model 3D'}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1">GLB/GLTF (Max 10MB)</p>
+                            </label>
+                          </div>
+
+                          <div className="flex gap-3 pt-4">
+                            <button
+                              type="submit"
+                              className="flex-1 bg-accent-green text-white py-3 rounded-lg hover:bg-green-600 transition font-semibold"
+                            >
+                              {showAddCategory ? 'Tambah Kategori' : 'Update Kategori'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={resetCategoryForm}
+                              className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-400 transition font-semibold"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        </form>
                       </div>
-                    </form>
+                    </div>
                   </div>
                 )}
 
+                {/* Categories List */}
                 <div className="grid md:grid-cols-3 gap-4">
                   {categories.map((category) => (
                     <div key={category.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
                       <div className="flex justify-between items-start mb-2">
                         <h4 className="font-semibold text-primary-dark">{category.name}</h4>
-                        <button 
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="text-red-600 hover:text-red-800"
-                          title="Hapus kategori"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleEditCategory(category)}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit kategori"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteCategory(category.id)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Hapus kategori"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                       <p className="text-sm text-gray-500">Slug: {category.slug}</p>
+                      <p className="text-sm text-gray-500">3D Model: {category.model_3d_url ? category.model_3d_url.split('/').pop() : '-'}</p>
                       {category.description && (
                         <p className="text-sm text-gray-600 mt-2">{category.description}</p>
                       )}

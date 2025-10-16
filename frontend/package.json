@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "@react-three/drei": "^9.88.11",
     "@react-three/fiber": "^8.15.16",
     "axios": "^1.6.0",

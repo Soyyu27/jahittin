@@ -11,6 +11,11 @@ const registerValidation = [
   body('password').isLength({ min: 6 }).withMessage('Password minimal 6 karakter')
 ];
 
+const loginValidation = [
+  body('email').isEmail().withMessage('Email tidak valid'),
+  body('password').notEmpty().withMessage('Password harus diisi')
+];
+
 // @route   POST /api/auth/register
 // @desc    Register new user
 // @access  Public
@@ -19,7 +24,7 @@ router.post('/register', registerValidation, authController.register);
 // @route   POST /api/auth/login
 // @desc    Login user
 // @access  Public
-router.post('/login', authController.login);
+router.post('/login', loginValidation, authController.login);
 
 // @route   GET /api/auth/profile
 // @desc    Get user profile

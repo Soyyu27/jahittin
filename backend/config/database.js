@@ -1,22 +1,19 @@
 const mysql = require('mysql2');
 require('dotenv').config();
 
-// Buat connection pool untuk performa lebih baik
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT,
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'konveksi_db',
+  port: process.env.DB_PORT || 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
 });
 
-// Konversi ke Promise untuk async/await
 const promisePool = pool.promise();
 
-// Test koneksi
 pool.getConnection((err, connection) => {
   if (err) {
     console.error('❌ Database connection error:', err.message);

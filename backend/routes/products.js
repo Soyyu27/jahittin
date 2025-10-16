@@ -4,7 +4,7 @@ const productController = require('../controllers/productController');
 const { authenticate, isAdmin } = require('../middleware/auth');
 const { uploadProductFiles } = require('../middleware/upload');
 
-// ✅ Urutan benar (jangan dibalik!)
+// Public routes
 router.get('/', productController.getAllProducts);
 router.get('/categories', productController.getCategories);
 router.get('/:id', productController.getProductById);
