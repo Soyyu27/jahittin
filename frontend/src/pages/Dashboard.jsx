@@ -301,38 +301,49 @@ const Dashboard = () => {
   };
 
   const handleEditCategory = (category) => {
-    setEditingCategory(category);
-    setCategoryForm({
-      name: category.name,
-      slug: category.slug,
-      description: category.description || '',
-    });
-    setModelFileName(category.model_3d_url ? category.model_3d_url.split('/').pop() : '');
-    setShowEditCategory(true);
-  };
+      setEditingCategory(category);
+      setCategoryForm({
+        name: category.name,
+        slug: category.slug,
+        description: category.description || '',
+      });
+      setModelFileName(category.model_3d_url ? category.model_3d_url.split('/').pop() : '');
+      setShowEditCategory(true);
+    };
 
-  const handleUpdateCategory = async (e) => {
+    const handleUpdateCategory = async (e) => {
     e.preventDefault();
-    
+
+    if (!categoryForm.name || !categoryForm.slug) {
+      alert("Nama dan slug wajib diisi.");
+      return;
+    }
+
     const form = new FormData();
-    Object.keys(categoryForm).forEach(key => {
-      form.append(key, categoryForm[key]);
-    });
-    
-    if (modelFile) form.append('model_3d', modelFile);
+    form.append("name", categoryForm.name);
+    form.append("slug", categoryForm.slug);
+    form.append("description", categoryForm.description || "");
+    if (modelFile) form.append("model_3d", modelFile);
 
     try {
-      await axios.put(`http://localhost:5000/api/categories/${editingCategory.id}`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      alert('Kategori berhasil diupdate!');
+      await axios.put(
+        `http://localhost:5000/api/categories/${editingCategory.id}`,
+        form,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+          withCredentials: true
+        }
+      );
+
+      alert("Kategori berhasil diupdate!");
       resetCategoryForm();
       loadCategories();
-      loadDashboardData();
     } catch (error) {
-      alert('Gagal mengupdate kategori: ' + (error.response?.data?.message || error.message));
+      console.error(error);
+      alert("Gagal mengupdate kategori: " + (error.response?.data?.message || error.message));
     }
   };
+
 
   const handleDeleteCategory = async (id) => {
     if (!window.confirm('Yakin ingin menghapus kategori ini?')) return;
